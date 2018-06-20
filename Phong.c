@@ -1,57 +1,8 @@
 #include <stdio.h>
 #include <math.h>
 #include "ift.h"
+#include "Phong.h"
 
-#define  NUM_NORMALS    65161
-
-#define GetXCoord(s,p) (((p) % (((s)->xsize)*((s)->ysize))) % (s)->xsize)
-#define GetYCoord(s,p) (((p) % (((s)->xsize)*((s)->ysize))) / (s)->xsize)
-#define GetZCoord(s,p) ((p) / (((s)->xsize)*((s)->ysize)))
-
-
-#define ROUND(x) ((x < 0)?(int)(x-0.5):(int)(x+0.5))
-#define GetVoxelIndex(s,v) ((v.x)+(s)->tby[(v.y)]+(s)->tbz[(v.z)])
-
-int RADIUS_THRESHOLD=2;
-int maxDist=164;
-
-typedef struct phong_model {
-  float      ka;
-  float      kd;
-  float      ks;
-  float      ns;
-  int        ndists;
-  iftVector *normal;
-  float     *dephBuffer;
-} PhongModel;
-
-
-typedef struct volume
-{
-    iftMatrix* normal;
-    iftMatrix* center;
-}iftVolumeFaces;
-
-typedef struct object_attr {
-  float opacity;
-  float green;
-  float red;
-  float blue;
-  char visibility;
-} ObjectAttributes;
-
-typedef struct gc {
-  ObjectAttributes *object;
-  int               numberOfObjects;
-  PhongModel       *phong;
-  iftMatrix        *Tinv;
-  iftVector        vDir;
-  iftImage         *tde;
-  iftImage         *scene;
-  iftImage         *label;
-  iftVolumeFaces   *faces;
-  iftImage         *normal;
-} GraphicalContext;
 
 
 int sign( int x ){
@@ -104,7 +55,7 @@ float PhongShading(GraphicalContext *gc, int p, iftVector N, float dist)
           aux = 0.;
         }
 
-        phong_val = gc->phong->ka + gc->phong->dephBuffer[(int)dist] * (gc->phong->kd * cos_ + gc->phong->ks * aux);
+        phong_val = gc->phong->ka + gc->phong->depthBuffer[(int)dist] * (gc->phong->kd * cos_ + gc->phong->ks * aux);
     }
 
     return phong_val;
@@ -113,17 +64,17 @@ float PhongShading(GraphicalContext *gc, int p, iftVector N, float dist)
 
 
 
-float DDA(GraphicalContext* gc, iftMatrix* Tp0, iftVector p1, iftVector pn)
+float DDA(GraphicalContext* gc, iftMatrix* Tp0, iftVector p1, iftVector pn, float* red, float* green, float* blue)
 {
     int n, k, idx;
     iftVoxel v;
     iftVector p;
     float max=0,J=0.0;
     int Dx,Dy,Dz;
-    float dx=0, dy=0, dz=0, phong_val, dist;
+    float dx=0, dy=0, dz=0, phong_val, dist, opac,acum_opacity;
     iftVector N;
 
-    //*red = *green = *blue = 0.0;
+    *red = *green = *blue = 0.0;
 
     if (p1.x == pn.x && p1.y == pn.y && p1.z == pn.z){
         n=1;
@@ -160,7 +111,8 @@ float DDA(GraphicalContext* gc, iftMatrix* Tp0, iftVector p1, iftVector pn)
 
 
     //int validP=0;
-    for (k = 1; k < n; k++)
+    acum_opacity=1.0;
+    for (k = 1; (k < n) && (acum_opacity > Epsilon); k++)
     {
         v.x=(int)p.x;
         v.y=(int)p.y;
@@ -172,16 +124,17 @@ float DDA(GraphicalContext* gc, iftMatrix* Tp0, iftVector p1, iftVector pn)
         {
             if (gc->object[gc->label->val[idx]].visibility != 0)
             {
-                //return 1.;
-                
                 dist =sqrtf((p.x-Tp0->val[0])*(p.x-Tp0->val[0])+(p.y-Tp0->val[1])*(p.y-Tp0->val[1])+(p.z-Tp0->val[2])*(p.z-Tp0->val[2]));
 
                 N.x  = -gc->phong->normal[gc->normal->val[idx]].x;
                 N.y  = -gc->phong->normal[gc->normal->val[idx]].y;
                 N.z  = -gc->phong->normal[gc->normal->val[idx]].z;
-                phong_val = PhongShading(gc, idx, N, dist);
-                J += (float) phong_val;
-                break;
+                opac = gc->object[gc->label->val[idx]].opacity;
+                phong_val = opac * PhongShading(gc, idx, N, dist) * acum_opacity;
+                *red   += phong_val * gc->object[gc->label->val[idx]].red;
+                *green += phong_val * gc->object[gc->label->val[idx]].green;
+                *blue  += phong_val * gc->object[gc->label->val[idx]].blue;
+                acum_opacity = acum_opacity * (1.0 -  opac);
             }
         }
 
@@ -189,11 +142,13 @@ float DDA(GraphicalContext* gc, iftMatrix* Tp0, iftVector p1, iftVector pn)
         p.y = p.y + dy;
         p.z = p.z + dz;
     }
-    if (J > 1) J = 1;
-    if (J < 0) J = 0;
+    if (*red < 0) *red = 0;
+    if (*green < 0) *green = 0;
+    if (*blue < 0) *blue = 0;
+    if (*red > 1) *red = 1;
+    if (*green > 1) *green = 1;
+    if (*blue > 1) *blue = 1;
 
-
-    return J;
 }
 
 iftVector *createNormalTable()
@@ -238,9 +193,9 @@ PhongModel *createPhongModel(iftImage *scene)
     phong->ns     = 5.0;
     phong->normal = createNormalTable();
     phong->ndists = (int)(maxDist);
-    phong->dephBuffer  = (float *) malloc(phong->ndists*sizeof(float));
+    phong->depthBuffer  = (float *) malloc(phong->ndists*sizeof(float));
     for (int d = 0; d < phong->ndists; d++){
-        phong->dephBuffer[d] = (float)  d / (float)phong->ndists;
+        phong->depthBuffer[d] = (float)  d / (float)phong->ndists;
     }
 
     return (phong);
@@ -276,9 +231,9 @@ ObjectAttributes *createObjectAttr(iftImage *label, int *numberOfObjects)
 
     for (int i = 1; i <= *numberOfObjects; i++)
     {
-        object[i].opacity    = 1;
-        object[i].red        = 1;
-        object[i].green      = 1;
+        object[i].opacity    = 0.6;
+        object[i].red        = 0;
+        object[i].green      = 0.8;
         object[i].blue       = 1;
         object[i].visibility = 1;
     }
@@ -505,19 +460,19 @@ iftSet *ObjectBorders(iftImage *label)
       iftVoxel u = iftGetVoxelCoord(label,p);
 
       for (int i=1; i < A->n; i++) {
-      	iftVoxel v = iftGetAdjacentVoxel(A,u,i);
-      	if (iftValidVoxel(label,v)){
-      	  int q = iftGetVoxelIndex(label,v);
-      	  if (label->val[q]!=label->val[p]){ // q belongs to another
-      					     // object/background,
-      					     // then p is border
-      	    iftInsertSet(&B,p);
-      	    break;
-  	      }
-  	     }else{ // p is at the border of the image, then it is border
-	         iftInsertSet(&B,p);
-	       break;
-	     }
+        iftVoxel v = iftGetAdjacentVoxel(A,u,i);
+        if (iftValidVoxel(label,v)){
+          int q = iftGetVoxelIndex(label,v);
+          if (label->val[q]!=label->val[p]){ // q belongs to another
+                     // object/background,
+                     // then p is border
+            iftInsertSet(&B,p);
+            break;
+          }
+         }else{ // p is at the border of the image, then it is border
+           iftInsertSet(&B,p);
+         break;
+       }
       }
     }
   }
@@ -530,7 +485,7 @@ iftSet *ObjectBorders(iftImage *label)
 void computeTDE(GraphicalContext *gc)
 {
 
-  iftAdjRel *A = iftSpheric(1.0);
+  iftAdjRel *A = iftSpheric(sqrt(3.0));
   iftSet    *B=ObjectBorders(gc->label);
   iftImage  *tde, *root;
   iftGQueue *Q;
@@ -549,6 +504,36 @@ void computeTDE(GraphicalContext *gc)
     root->val[p]    = p;
     tde->val[p]     = 0;
     iftInsertGQueue(&Q, p);
+  }
+
+  while (!iftEmptyGQueue(Q))
+  {
+    int p       = iftRemoveGQueue(Q);
+    iftVoxel u  = iftGetVoxelCoord(gc->label, p);
+    iftVoxel rp = iftGetVoxelCoord(gc->label,root->val[p]);
+
+    for (int i = 1; i < A->n; i++)
+    {
+      iftVoxel v = iftGetAdjacentVoxel(A, u, i);
+
+      if (iftValidVoxel(gc->label, v))
+      {
+        int q = iftGetVoxelIndex(gc->label, v);
+
+        if ((gc->label->val[q]==gc->label->val[p])&&(tde->val[q]>tde->val[p])){
+          int tmp = iftSquaredVoxelDistance(v,rp);
+          if (tmp < tde->val[q]) {
+            //if (tde->val[q] != IFT_INFINITY_INT)
+            if (Q->L.elem[q].color == IFT_GRAY){
+            iftRemoveGQueueElem(Q,q);
+            }
+            root->val[q]     = root->val[p];
+            tde->val[q]      = tmp;
+            iftInsertGQueue(&Q, q);
+          }
+        }
+      }
+    }
   }
 
   gc->tde=tde;
@@ -597,9 +582,9 @@ GraphicalContext *createGC(iftImage *scene, iftImage *imageLabel, float tilt, fl
     gc->label       = iftCopyImage(imageLabel);
     gc->object      = createObjectAttr(imageLabel, &gc->numberOfObjects);
 
-    //computeTDE(gc);
-    computeSceneNormal(gc);
-    //computeNormals(gc);
+    computeTDE(gc);
+    //computeSceneNormal(gc);
+    computeNormals(gc);
 
     return (gc);
 }
@@ -706,6 +691,28 @@ iftMatrix *imagePixelToMatrix(iftImage *img, int p)
     return pixMat;
 }
 
+iftColor RGBtoYCbCr(iftColor cin)
+{
+    iftColor cout;
+
+    cout.val[0] = (int)(0.257 * (float)cin.val[0] +
+                        0.504 * (float)cin.val[1] +
+                        0.098 * (float)cin.val[2] + 16.0);
+    cout.val[1] = (int)(-0.148 * (float)cin.val[0] +
+                        -0.291 * (float)cin.val[1] +
+                        0.439 * (float)cin.val[2] + 128.0);
+    cout.val[2] = (int)(0.439 * (float)cin.val[0] +
+                        -0.368 * (float)cin.val[1] +
+                        -0.071 * (float)cin.val[2] + 128.0);
+
+    for (int i = 0; i < 3; i++)
+    {
+        if (cout.val[i] < 0)   cout.val[i] = 0;
+        if (cout.val[i] > 255) cout.val[i] = 255;
+    }
+
+    return (cout);
+}
 
 iftImage* phongRender(GraphicalContext *gc)
 {
@@ -729,6 +736,7 @@ iftImage* phongRender(GraphicalContext *gc)
     iftMatrix* tVec = iftMultMatrices(gc->Tinv, vec);
     diagonal = sqrt((gc->scene->xsize * gc->scene->xsize) + (gc->scene->ysize * gc->scene->ysize) + (gc->scene->zsize * gc->scene->zsize));
     outputImage = iftCreateImage(diagonal, diagonal, 1);
+    iftSetCbCr(outputImage, 128);
 
     for (int p = 0; p < outputImage->n; p++)
     {
@@ -741,8 +749,15 @@ iftImage* phongRender(GraphicalContext *gc)
 
         if (computeIntersection(gc, Tpo, tVec, &p1, &pn))
         {
-            intensity = DDA(gc, Tpo, p1, pn);
-            outputImage->val[p] = (int)(255.0 * intensity);
+            DDA(gc, Tpo, p1, pn, &r, &g, &b);
+
+            RGB.val[0]     = (int)(255.0 * r);
+            RGB.val[1]     = (int)(255.0 * g);
+            RGB.val[2]     = (int)(255.0 * b);
+            YCbCr          = RGBtoYCbCr(RGB);
+            outputImage->val[p] = YCbCr.val[0];
+            outputImage->Cb[p]  = YCbCr.val[1];
+            outputImage->Cr[p]  = YCbCr.val[2];
         }
 
         iftDestroyMatrix(&Mtemp);
