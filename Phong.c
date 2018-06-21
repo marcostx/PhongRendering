@@ -4,7 +4,7 @@
 #include "Phong.h"
 
 
-
+int MAXDIST=0;
 int sign( int x ){
     if(x >= 0)
         return 1;
@@ -21,12 +21,6 @@ int isValidPoint(iftImage *img, iftVoxel u)
     else{
         return 0;
     }
-}
-
-
-int diagonalSize(iftImage *img)
-{
-    return ROUND(sqrt((double) (img->xsize * img->xsize) + (img->ysize * img->ysize) + (img->zsize * img->zsize)));
 }
 
 float PhongShading(GraphicalContext *gc, int p, iftVector N, float dist)
@@ -123,19 +117,25 @@ float DDA(GraphicalContext* gc, iftMatrix* Tp0, iftVector p1, iftVector pn, floa
         if (gc->label->val[idx] != 0)
         {
             if (gc->object[gc->label->val[idx]].visibility != 0)
-            {
-                dist =sqrtf((p.x-Tp0->val[0])*(p.x-Tp0->val[0])+(p.y-Tp0->val[1])*(p.y-Tp0->val[1])+(p.z-Tp0->val[2])*(p.z-Tp0->val[2]));
+            {   
+              // *red=1.;
+              // *green=1.;
+              // *blue=1.;
+              // return;
 
-                N.x  = -gc->phong->normal[gc->normal->val[idx]].x;
-                N.y  = -gc->phong->normal[gc->normal->val[idx]].y;
-                N.z  = -gc->phong->normal[gc->normal->val[idx]].z;
-                opac = gc->object[gc->label->val[idx]].opacity;
-                phong_val = opac * PhongShading(gc, idx, N, dist) * acum_opacity;
-                *red   += phong_val * gc->object[gc->label->val[idx]].red;
-                *green += phong_val * gc->object[gc->label->val[idx]].green;
-                *blue  += phong_val * gc->object[gc->label->val[idx]].blue;
-                acum_opacity = acum_opacity * (1.0 -  opac);
-            }
+              dist =sqrtf((p.x-Tp0->val[0])*(p.x-Tp0->val[0])+(p.y-Tp0->val[1])*(p.y-Tp0->val[1])+(p.z-Tp0->val[2])*(p.z-Tp0->val[2]));
+              if (dist > MAXDIST)
+                MAXDIST=dist;
+              N.x  = -gc->phong->normal[gc->normal->val[idx]].x;
+              N.y  = -gc->phong->normal[gc->normal->val[idx]].y;
+              N.z  = -gc->phong->normal[gc->normal->val[idx]].z;
+              opac = gc->object[gc->label->val[idx]].opacity;
+              phong_val = PhongShading(gc, idx, N, dist) * acum_opacity;
+              *red   += phong_val * gc->object[gc->label->val[idx]].red;
+              *green += phong_val * gc->object[gc->label->val[idx]].green;
+              *blue  += phong_val * gc->object[gc->label->val[idx]].blue;
+              acum_opacity = acum_opacity * (1.0 -  opac);
+          }
         }
 
         p.x = p.x + dx;
@@ -192,7 +192,7 @@ PhongModel *createPhongModel(iftImage *scene)
     phong->ks     = 0.2;
     phong->ns     = 5.0;
     phong->normal = createNormalTable();
-    phong->ndists = (int)(maxDist);
+    phong->ndists = 147;
     phong->depthBuffer  = (float *) malloc(phong->ndists*sizeof(float));
     for (int d = 0; d < phong->ndists; d++){
         phong->depthBuffer[d] = (float)  d / (float)phong->ndists;
@@ -227,16 +227,26 @@ ObjectAttributes *createObjectAttr(iftImage *label, int *numberOfObjects)
     object[0].blue       = 0;
     object[0].visibility = 0;
 
+    printf("%d\n", *numberOfObjects);
     /* default for objects */
-
-    for (int i = 1; i <= *numberOfObjects; i++)
-    {
-        object[i].opacity    = 0.6;
-        object[i].red        = 0;
-        object[i].green      = 0.8;
-        object[i].blue       = 1;
-        object[i].visibility = 1;
-    }
+    object[1].opacity    = 0.12;
+    object[1].red        = 0.3;
+    object[1].green      = 0.3;
+    object[1].blue       = 0.9;
+    object[1].visibility = 1;
+    
+    object[2].opacity    = 0.12;
+    object[2].red        = 1;
+    object[2].green      = 1;
+    object[2].blue       = 0;
+    object[2].visibility = 1;
+    
+    object[3].opacity    = 0.12;
+    object[3].red        = 0.7;
+    object[3].green      = 0.1;
+    object[3].blue       = 1;
+    object[3].visibility = 1;
+    
 
     return (object);
 }
@@ -582,7 +592,7 @@ GraphicalContext *createGC(iftImage *scene, iftImage *imageLabel, float tilt, fl
     gc->label       = iftCopyImage(imageLabel);
     gc->object      = createObjectAttr(imageLabel, &gc->numberOfObjects);
 
-    computeTDE(gc);
+    computeTDE(gc); 
     //computeSceneNormal(gc);
     computeNormals(gc);
 
@@ -788,6 +798,7 @@ int main(int argc, char *argv[])
     gc = createGC(img, imgLabel, tilt, spin);
     output   = phongRender(gc);
     printf("Done\n");
+    printf("%d\n", MAXDIST);
 
     sprintf(buffer, "data/test3.png");
 
