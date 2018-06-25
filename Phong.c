@@ -406,7 +406,7 @@ void computeSceneNormal(GraphicalContext* gc)
 void computeNormals(GraphicalContext* gc)
 {
     iftImage   *borders;
-    iftAdjRel  *A   = iftSpheric(3.0);
+    iftAdjRel  *A   = iftSpheric(5.0);
     float      *mag = (float *) malloc(A->n*sizeof(float));
     float      diff;
     int        i, p, q, idx;
@@ -495,7 +495,7 @@ iftSet *ObjectBorders(iftImage *label)
 void computeTDE(GraphicalContext *gc)
 {
 
-  iftAdjRel *A = iftSpheric(sqrt(3.0));
+  iftAdjRel *A = iftSpheric(1.0);
   iftSet    *B=ObjectBorders(gc->label);
   iftImage  *tde, *root;
   iftGQueue *Q;
@@ -800,7 +800,7 @@ int main(int argc, char *argv[])
     printf("Done\n");
     printf("%d\n", MAXDIST);
 
-    sprintf(buffer, "data/test3.png");
+    sprintf(buffer, "data/%.1f%.1f%s", tilt, spin, argv[5]);
 
     iftImage *normalizedImage= iftNormalize(output,0,255);
 
