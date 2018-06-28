@@ -118,11 +118,6 @@ float DDA(GraphicalContext* gc, iftMatrix* Tp0, iftVector p1, iftVector pn, floa
         {
             if (gc->object[gc->label->val[idx]].visibility != 0)
             {   
-              // *red=1.;
-              // *green=1.;
-              // *blue=1.;
-              // return;
-
               dist =sqrtf((p.x-Tp0->val[0])*(p.x-Tp0->val[0])+(p.y-Tp0->val[1])*(p.y-Tp0->val[1])+(p.z-Tp0->val[2])*(p.z-Tp0->val[2]));
               if (dist > MAXDIST)
                 MAXDIST=dist;
@@ -192,7 +187,7 @@ PhongModel *createPhongModel(iftImage *scene)
     phong->ks     = 0.2;
     phong->ns     = 5.0;
     phong->normal = createNormalTable();
-    phong->ndists = 147;
+    phong->ndists = 140;
     phong->depthBuffer  = (float *) malloc(phong->ndists*sizeof(float));
     for (int d = 0; d < phong->ndists; d++){
         phong->depthBuffer[d] = (float)  d / (float)phong->ndists;
@@ -212,41 +207,38 @@ int MaximumValue(iftImage *img)
     return Imax;
 }
 
-ObjectAttributes *createObjectAttr(iftImage *label, int *numberOfObjects)
+ObjectAttributes *createObjectAttr(iftImage *label, int *numberOfObjects, char* configFilename)
 {
+    FILE* configFile;
     ObjectAttributes *object;
     *numberOfObjects = MaximumValue(label);
+    float r,g,b,o,v;
+    int i=1;
 
-
-    //object = (ObjectAttributes *)calloc(*numberOfObjects + 1, sizeof(ObjectAttributes));
     object = (ObjectAttributes *)calloc(*numberOfObjects + 1, sizeof(ObjectAttributes));
+    configFile = fopen(configFilename, "r");
 
+    if (configFile == NULL)
+    {
+       printf("Problemas na abertura do arquivo\n");
+       exit(1);
+    }
     object[0].opacity    = 0;
     object[0].red        = 0;
     object[0].green      = 0;
     object[0].blue       = 0;
     object[0].visibility = 0;
 
-    printf("%d\n", *numberOfObjects);
-    /* default for objects */
-    object[1].opacity    = 0.12;
-    object[1].red        = 0.3;
-    object[1].green      = 0.3;
-    object[1].blue       = 0.9;
-    object[1].visibility = 1;
-    
-    object[2].opacity    = 0.12;
-    object[2].red        = 1;
-    object[2].green      = 1;
-    object[2].blue       = 0;
-    object[2].visibility = 1;
-    
-    object[3].opacity    = 0.12;
-    object[3].red        = 0.7;
-    object[3].green      = 0.1;
-    object[3].blue       = 1;
-    object[3].visibility = 1;
-    
+    while (fscanf(configFile, "%f, %f, %f, %f, %f\n", &r, &g, &b, &o, &v) != EOF)
+    {
+      object[i].opacity    = o;
+      object[i].red        = r;
+      object[i].green      = g;
+      object[i].blue       = b;
+      object[i].visibility = v;
+      i++;
+    }
+    fclose(configFile);
 
     return (object);
 }
@@ -406,7 +398,7 @@ void computeSceneNormal(GraphicalContext* gc)
 void computeNormals(GraphicalContext* gc)
 {
     iftImage   *borders;
-    iftAdjRel  *A   = iftSpheric(5.0);
+    iftAdjRel  *A   = iftSpheric(3.0);
     float      *mag = (float *) malloc(A->n*sizeof(float));
     float      diff;
     int        i, p, q, idx;
@@ -417,7 +409,7 @@ void computeNormals(GraphicalContext* gc)
     borders    = iftObjectBorders(gc->label, A);
 
     gc->normal = iftCreateImage(gc->label->xsize, gc->label->ysize, gc->label->zsize);
-    A   = iftSpheric(5.0);
+    A   = iftSpheric(3.0);
     for (i = 0; i < A->n; i++)
         mag[i] = sqrtf(A->dx[i] * A->dx[i] + A->dy[i] * A->dy[i] + A->dz[i] * A->dz[i]);
 
@@ -553,7 +545,7 @@ void computeTDE(GraphicalContext *gc)
   iftDestroyImage(&root);
 }
 
-GraphicalContext *createGC(iftImage *scene, iftImage *imageLabel, float tilt, float spin)
+GraphicalContext *createGC(iftImage *scene, iftImage *imageLabel, float tilt, float spin, char* configFilename)
 {
     GraphicalContext *gc;
 
@@ -590,7 +582,7 @@ GraphicalContext *createGC(iftImage *scene, iftImage *imageLabel, float tilt, fl
     gc->vDir.x = iftMatrixElem(vec, 0, 0); gc->vDir.y = iftMatrixElem(vec, 0, 1); gc->vDir.z = iftMatrixElem(vec, 0, 2);
 
     gc->label       = iftCopyImage(imageLabel);
-    gc->object      = createObjectAttr(imageLabel, &gc->numberOfObjects);
+    gc->object      = createObjectAttr(imageLabel, &gc->numberOfObjects, configFilename);
 
     computeTDE(gc); 
     //computeSceneNormal(gc);
@@ -786,6 +778,7 @@ int main(int argc, char *argv[])
     GraphicalContext *gc;
     char *imgFileName = iftCopyString(argv[1]);
     char *imgLabelFileName = iftCopyString(argv[2]);
+    char *configFile = iftCopyString(argv[5]);
     iftImage *output = NULL;
 
 
@@ -795,12 +788,12 @@ int main(int argc, char *argv[])
     tilt = atof(argv[3]);
     spin = atof(argv[4]);
 
-    gc = createGC(img, imgLabel, tilt, spin);
+    gc = createGC(img, imgLabel, tilt, spin, configFile);
     output   = phongRender(gc);
     printf("Done\n");
     printf("%d\n", MAXDIST);
 
-    sprintf(buffer, "data/%.1f%.1f%s", tilt, spin, argv[5]);
+    sprintf(buffer, "data/%.1f%.1f%s", tilt, spin, argv[6]);
 
     iftImage *normalizedImage= iftNormalize(output,0,255);
 
