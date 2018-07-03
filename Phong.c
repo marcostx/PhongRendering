@@ -33,11 +33,11 @@ float PhongShading(GraphicalContext *gc, int p, iftVector N, float dist)
     cos_  =   iftVectorInnerProduct(gc->vDir, N);
 
     arcos = acos(cos_);
-    if (arcos <= PI/2 && arcos > 0)
+    if (arcos <= PI/2 && arcos >= 0)
     {
         cos_2 = 2 * cos_ * cos_ - 1;
 
-        if (arcos <= PI/4 && arcos > 0){
+        if (arcos <= PI/4 && arcos >= 0){
           aux = 1.;
           for (int k = 0; k < gc->phong->ns; k++)
               aux = aux * cos_2;
@@ -121,12 +121,15 @@ float DDA(GraphicalContext* gc, iftMatrix* Tp0, iftVector p1, iftVector pn, floa
         {
             if (gc->object[gc->label->val[idx]].visibility != 0)
             {   
-              // if (objects_seen[gc->label->val[idx]]==0){
-              //   objects_seen[gc->label->val[idx]]=1;
-              // }
-              // else{
-              //   continue;  
-              // }
+              if (objects_seen[gc->label->val[idx]]==0){
+                objects_seen[gc->label->val[idx]]=1;
+              }
+              else{
+                p.x = p.x + dx;
+                p.y = p.y + dy;
+                p.z = p.z + dz;
+                continue;  
+              }
               
               dist =sqrtf((p.x-Tp0->val[0])*(p.x-Tp0->val[0])+(p.y-Tp0->val[1])*(p.y-Tp0->val[1])+(p.z-Tp0->val[2])*(p.z-Tp0->val[2]));
               if (dist > MAXDIST)
@@ -245,6 +248,7 @@ ObjectAttributes *createObjectAttr(iftImage *label, int *numberOfObjects, char* 
 
     while (fscanf(configFile, "%f, %f, %f, %f, %f\n", &r, &g, &b, &o, &v) != EOF)
     {
+      printf("%f\n", o );
       object[i].opacity    = o;
       object[i].red        = r;
       object[i].green      = g;
@@ -427,7 +431,7 @@ void computeSceneNormal(GraphicalContext* gc)
 void computeNormals(GraphicalContext* gc)
 {
     iftImage   *borders;
-    iftAdjRel  *A   = iftSpheric(5.0);
+    iftAdjRel  *A   = iftSpheric(3.0);
     float      *mag = (float *) malloc(A->n*sizeof(float));
     float      diff;
     int        i, p, q, idx;
@@ -438,7 +442,7 @@ void computeNormals(GraphicalContext* gc)
     borders    = iftObjectBorders(gc->label, A);
 
     gc->normal = iftCreateImage(gc->label->xsize, gc->label->ysize, gc->label->zsize);
-    A   = iftSpheric(5.0);
+    A   = iftSpheric(3.0);
     for (i = 0; i < A->n; i++)
         mag[i] = sqrtf(A->dx[i] * A->dx[i] + A->dy[i] * A->dy[i] + A->dz[i] * A->dz[i]);
 
@@ -613,9 +617,9 @@ GraphicalContext *createGC(iftImage *scene, iftImage *imageLabel, float tilt, fl
     gc->label       = iftCopyImage(imageLabel);
     gc->object      = createObjectAttr(imageLabel, &gc->numberOfObjects, configFilename);
 
-    //computeTDE(gc); 
-    computeSceneNormal(gc);
-    //computeNormals(gc);
+    computeTDE(gc); 
+    //computeSceneNormal(gc);
+    computeNormals(gc);
 
     return (gc);
 }
