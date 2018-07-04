@@ -125,9 +125,11 @@ float DDA(GraphicalContext* gc, iftMatrix* Tp0, iftVector p1, iftVector pn, floa
                 objects_seen[gc->label->val[idx]]=1;
               }
               else{
+
                 p.x = p.x + dx;
                 p.y = p.y + dy;
                 p.z = p.z + dz;
+                
                 continue;  
               }
               
@@ -248,7 +250,6 @@ ObjectAttributes *createObjectAttr(iftImage *label, int *numberOfObjects, char* 
 
     while (fscanf(configFile, "%f, %f, %f, %f, %f\n", &r, &g, &b, &o, &v) != EOF)
     {
-      printf("%f\n", o );
       object[i].opacity    = o;
       object[i].red        = r;
       object[i].green      = g;
@@ -617,9 +618,9 @@ GraphicalContext *createGC(iftImage *scene, iftImage *imageLabel, float tilt, fl
     gc->label       = iftCopyImage(imageLabel);
     gc->object      = createObjectAttr(imageLabel, &gc->numberOfObjects, configFilename);
 
-    computeTDE(gc); 
-    //computeSceneNormal(gc);
-    computeNormals(gc);
+    //computeTDE(gc); 
+    computeSceneNormal(gc);
+    //computeNormals(gc);
 
     return (gc);
 }
@@ -677,7 +678,6 @@ int computeIntersection(GraphicalContext* gc, iftMatrix *Tpo, iftMatrix *Tn, ift
             v3 = columnVectorMatrixToVector(V);
             innerPV = iftVectorInnerProduct(v1, v3);
             lambda= (float) innerPV / innerP;
-            //printf("%f\n", lambda);
 
             P.x = Tpo->val[0] + lambda * Tn->val[0];
             P.y = Tpo->val[1] + lambda * Tn->val[1];
@@ -773,9 +773,10 @@ iftImage* phongRender(GraphicalContext *gc)
     outputImage = iftCreateImage(diagonal, diagonal, 1);
     iftSetCbCr(outputImage, 128);
 
+    int progress = 0;
     for (int p = 0; p < outputImage->n; p++)
     {
-        //printf("Step : %d\n", p);
+        fprintf(stdout, "Progress: %.1f %s\r", (progress/(float)outputImage->n*100.0), "%"); fflush(stdout);
         float     r = 0.0, g = 0.0, b = 0.0;
         Mtemp = imagePixelToMatrix(outputImage,p);
         iftMatrixElem(Mtemp, 0, 2) = diagonal/2;
@@ -797,7 +798,9 @@ iftImage* phongRender(GraphicalContext *gc)
 
         iftDestroyMatrix(&Mtemp);
         iftDestroyMatrix(&Tpo);
+        progress++;
     }
+    fprintf(stdout, "\n"); fflush(stdout);
 
     return outputImage;
 }
@@ -835,3 +838,9 @@ int main(int argc, char *argv[])
     iftDestroyImage(&output);
     return 0;
 }
+
+// cranio : 0.6, 0.1, 0.8, 1., 1
+
+// lungs : 0.7, 0.7, 0.1, 0.3, 1
+//         0.9, 0.1, 0.1, 0.3, 1
+//         0.1, 0.1, 0.8, 1., 1
